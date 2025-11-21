@@ -1,5 +1,5 @@
 /** @type {import('next').NextConfig} */
-const path = require('path');
+import path from 'path';
 
 const nextConfig = {
   reactStrictMode: true,
@@ -14,10 +14,10 @@ const nextConfig = {
     // Ensure path resolution works in deployment
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@': path.resolve(__dirname, './'),
-      '@/lib': path.resolve(__dirname, './lib'),
-      '@/components': path.resolve(__dirname, './components'),
-      '@/app': path.resolve(__dirname, './app')
+      '@': path.resolve('./'),
+      '@/lib': path.resolve('./lib'),
+      '@/components': path.resolve('./components'),
+      '@/app': path.resolve('./app')
     };
     return config;
   }
