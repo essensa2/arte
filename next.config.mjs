@@ -5,6 +5,16 @@ const nextConfig = {
     serverActions: {
       allowedOrigins: ['*']
     }
+  },
+  // Configure path resolution for deployment
+  transpilePackages: [],
+  webpack: (config, { isServer }) => {
+    // Ensure path resolution works in deployment
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@': './'
+    };
+    return config;
   }
 };
 
