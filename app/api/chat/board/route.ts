@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerSupabase } from "@/lib/supabase/server";
 
-const MODEL = "qwen/qwen-2.5-vl-7b-instruct";
+const MODEL = "qwen/qwen-2.5-vl-7b-instruct"; // Changed from Google Gemini to OpenRouter's qwen model
 
 interface ChatMessage {
   role: "user" | "assistant";
-  content: string | { type: "text"; text: string }[] | { type: "image_url"; image_url: { url: string } };
+  content: string | ({ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } })[];
 }
 
 interface ChatRequest {
@@ -101,9 +101,30 @@ export async function POST(request: NextRequest) {
     const { messages = [], boardId, addData, updateData, imageContent }: ChatRequest = body;
     console.log("Request params:", { boardId, hasMessages: messages.length > 0, hasAddData: !!addData });
 
+    // Log message types for debugging
+    messages.forEach((msg, idx) => {
+      if (typeof msg.content === 'string') {
+        console.log(`Msg ${idx} (${msg.role}): string content`);
+      } else if (Array.isArray(msg.content)) {
+        console.log(`Msg ${idx} (${msg.role}): array content, length ${msg.content.length}`);
+        msg.content.forEach((part, pIdx) => {
+          if ('type' in part) {
+            console.log(`  Part ${pIdx}: type=${part.type}`);
+            if (part.type === 'image_url') {
+              console.log(`    Image URL length: ${part.image_url.url.length}`);
+              console.log(`    Image URL start: ${part.image_url.url.substring(0, 30)}...`);
+            }
+          }
+        });
+      }
+    });
+
     if (!process.env.OPENROUTER_API_KEY) {
+      console.error("OPENROUTER_API_KEY is missing from environment variables");
       return NextResponse.json({ error: "OPENROUTER_API_KEY missing" }, { status: 500 });
     }
+
+    console.log("Using OpenRouter API with model:", MODEL);
 
     const supabase = createServerSupabase();
 
@@ -125,21 +146,21 @@ export async function POST(request: NextRequest) {
       name: c.name,
       type: c.type
     }));
-    const columnInfo = columnMapping.length > 0 
+    const columnInfo = columnMapping.length > 0
       ? columnMapping.map((c: any) => `- Veerg "${c.name}" (tüüp: ${c.type}, ID: ${c.id})`).join("\n")
       : "Pole veerge";
     const sampleItems = items.map((i: any) => i.name).join(", ") || "Pole üksusi";
 
     // Check if any message contains an image
-    const hasImage = messages.some((msg: ChatMessage) => 
-      typeof msg.content !== "string" && 
-      Array.isArray(msg.content) && 
+    const hasImage = messages.some((msg: ChatMessage) =>
+      typeof msg.content !== "string" &&
+      Array.isArray(msg.content) &&
       msg.content.some((part: any) => part.type === "image_url")
     );
     const lastMessage = messages[messages.length - 1];
-    const lastMessageHasImage = lastMessage && typeof lastMessage.content !== "string" && 
-                                Array.isArray(lastMessage.content) && 
-                                lastMessage.content.some((part: any) => part.type === "image_url");
+    const lastMessageHasImage = lastMessage && typeof lastMessage.content !== "string" &&
+      Array.isArray(lastMessage.content) &&
+      lastMessage.content.some((part: any) => part.type === "image_url");
 
     // Build example JSON with actual column IDs
     const exampleCellValues = columnMapping.slice(0, 3).reduce((acc: any, col: any, idx: number) => {
@@ -169,7 +190,7 @@ ${Object.entries(exampleCellValues).map(([id, val]) => `    "${id}": ${val}`).jo
     // Find specific columns that might be referenced
     const column2025OKT = columnMapping.find((c: any) => c.name.toLowerCase().includes('2025okt') || c.name.toLowerCase().includes('2025'));
     const nameColumn = columnMapping.find((c: any) => c.name.toLowerCase().includes('nimi') || c.name.toLowerCase().includes('name') || c.type === 'text');
-    
+
     const systemPrompt = `Sa oled ArtePay Board AI assistent. ALATI vasta eesti keeles.
 
 ═══════════════════════════════════════════════════════════════
@@ -181,6 +202,8 @@ Kui kasutaja saadab ekraanipildi või pildi, on see SINU PEAMINE ÜLESANNE:
 2. Eraldada KÕIK andmed, mis sobivad tabeli veergudega
 3. ALATI tagastada JSON-vormingus suggestedAction
 4. MITTE lihtsalt kirjeldada, mida näed - PEA tegutsema!
+5. ÄRA KUNAGI küsi pilti uuesti - kui kasutaja ütleb, et saatis pildi, siis see on sinu kontekstis olemas!
+
 
 ═══════════════════════════════════════════════════════════════
 TABELI STRUKTUUR
@@ -281,12 +304,12 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
 
     // Add reinforcement message if image is detected
     const imageReminder = lastMessageHasImage ? [
-      { 
-        role: "user" as const, 
-        content: [{ 
-          type: "text" as const, 
-          text: "OLULINE: Analüüsi seda ekraanipilti hoolikalt ja eralda KÕIK andmed, mis sobivad tabeli veergudega. Tagasta JSON-vormingus suggestedAction kohe pärast analüüsi." 
-        }] 
+      {
+        role: "user" as const,
+        content: [{
+          type: "text" as const,
+          text: "OLULINE: Analüüsi seda ekraanipilti hoolikalt ja eralda KÕIK andmed, mis sobivad tabeli veergudega. Tagasta JSON-vormingus suggestedAction kohe pärast analüüsi."
+        }]
       }
     ] : [];
 
@@ -300,6 +323,7 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
       ...imageReminder,
     ];
 
+    console.log("Sending request to OpenRouter API...");
     const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -315,8 +339,11 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
       }),
     });
 
+    console.log("OpenRouter API response status:", res.status);
+
     if (!res.ok) {
       const err = await res.json();
+      console.error("OpenRouter API error:", err);
       return NextResponse.json({ error: err.error?.message || "OpenRouter error" }, { status: 500 });
     }
 
@@ -330,7 +357,7 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
     }
 
     let suggestedAction = null;
-    
+
     // Enhanced JSON extraction - try multiple strategies
     if (hasImage) {
       // Strategy 1: Look for JSON in code blocks (most reliable)
@@ -363,7 +390,7 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
           }
         }
       }
-      
+
       // Strategy 2: Look for complete JSON objects with action field
       if (!suggestedAction) {
         const jsonMatch = assistantContent.match(/\{[\s\S]*?"action"[\s\S]*?\}/);
@@ -391,7 +418,7 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
           }
         }
       }
-      
+
       // Strategy 3: Look for any JSON-like structure with items array
       if (!suggestedAction) {
         const itemsArrayMatch = assistantContent.match(/\{[\s\S]*?"items"[\s\S]*?\[[\s\S]*?\]/);
@@ -431,7 +458,7 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
           }
         }
       }
-      
+
       // Strategy 4: If still no action and we have image, log warning
       if (!suggestedAction) {
         console.warn("⚠️ Image detected but no suggestedAction extracted. Response:", assistantContent.substring(0, 300));
@@ -445,33 +472,33 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
           if (parsed.action === "add_item" && parsed.itemName && parsed.cellValues) {
             suggestedAction = parsed;
           }
-        } catch {}
+        } catch { }
       }
     }
 
     // Remove JSON code blocks and JSON objects from the displayed message
     // Keep only the Estonian text response
     let displayContent = assistantContent;
-    
+
     try {
       // Remove JSON code blocks
       displayContent = displayContent.replace(/```json[\s\S]*?```/g, '');
       displayContent = displayContent.replace(/```[\s\S]*?\{[\s\S]*?\}[\s\S]*?```/g, '');
-      
+
       // Remove lines that look like JSON (contain "action", "itemName", "cellValues", etc.)
       const lines = displayContent.split('\n');
-      const filteredLines = lines.filter(line => {
+      const filteredLines = lines.filter((line: string) => {
         const trimmed = line.trim();
         // Skip lines that are clearly JSON
-        if (trimmed.startsWith('{') || trimmed.startsWith('}') || 
-            trimmed.includes('"action"') || trimmed.includes('"itemName"') || 
-            trimmed.includes('"cellValues"') || trimmed.includes('"items"')) {
+        if (trimmed.startsWith('{') || trimmed.startsWith('}') ||
+          trimmed.includes('"action"') || trimmed.includes('"itemName"') ||
+          trimmed.includes('"cellValues"') || trimmed.includes('"items"')) {
           return false;
         }
         return true;
       });
       displayContent = filteredLines.join('\n');
-      
+
       // Clean up extra whitespace and newlines
       displayContent = displayContent.replace(/\n{3,}/g, '\n\n').trim();
     } catch (e) {
@@ -479,7 +506,7 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
       console.error("Error filtering JSON from display:", e);
       displayContent = assistantContent;
     }
-    
+
     // If content is empty after removing JSON, use a default message
     if (!displayContent || displayContent.length < 10) {
       if (suggestedAction && typeof suggestedAction === 'object' && 'action' in suggestedAction) {
@@ -497,17 +524,23 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
         displayContent = "Analüüsisin pildi. Kui leidsin andmeid, näed neid tabelis.";
       }
     }
-    
+
     const assistantMsg = { role: "assistant", content: displayContent, suggestedAction };
 
     let addedItemId = null;
     let addedItemIds: string[] = [];
     let updatedItemIds: string[] = [];
-    
+
+    // Use suggestedAction as data to process if no explicit addData is provided
+    let dataToProcess = addData;
+    if (!dataToProcess && suggestedAction) {
+      dataToProcess = suggestedAction;
+    }
+
     // Handle update_or_add_items - find existing items by name and update them
-    if (addData && 'items' in addData && Array.isArray(addData.items) && addData.items.length > 0) {
-      const actionType = (addData as any).action || 'add_items';
-      
+    if (dataToProcess && 'items' in dataToProcess && Array.isArray(dataToProcess.items) && dataToProcess.items.length > 0) {
+      const actionType = (dataToProcess as any).action || 'add_items';
+
       if (actionType === 'update_or_add_items') {
         try {
           // Get all existing items for name matching
@@ -515,19 +548,19 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
             .from("items")
             .select("id, name")
             .eq("board_id", boardId);
-          
+
           const itemsMap = new Map<string, string>(); // name -> item_id
           (allItems || []).forEach((item: any) => {
             itemsMap.set(item.name.toLowerCase().trim(), item.id);
           });
-          
+
           // Process each item: update if exists, create if not
-          for (const itemData of addData.items) {
+          for (const itemData of dataToProcess.items) {
             const itemName = itemData.itemName?.trim();
             if (!itemName) continue;
-            
+
             const existingItemId = itemsMap.get(itemName.toLowerCase());
-            
+
             if (existingItemId) {
               // UPDATE existing item
               for (const [colId, value] of Object.entries(itemData.cellValues || {})) {
@@ -539,7 +572,7 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
                 } else {
                   cellValue = { text: String(value) };
                 }
-                
+
                 await supabase.from("cell_values").upsert({
                   item_id: existingItemId,
                   column_id: colId,
@@ -567,7 +600,7 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
 
               if (newItem) {
                 addedItemIds.push(newItem.id);
-                
+
                 for (const [colId, value] of Object.entries(itemData.cellValues || {})) {
                   let cellValue: any;
                   if (typeof value === "string") {
@@ -577,7 +610,7 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
                   } else {
                     cellValue = { text: String(value) };
                   }
-                  
+
                   await supabase.from("cell_values").upsert({
                     item_id: newItem.id,
                     column_id: colId,
@@ -601,8 +634,8 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
           .single();
 
         let nextPos = (lastItem?.position || 0) + 1;
-        
-        const itemsToInsert = addData.items.map((item: any) => ({
+
+        const itemsToInsert = dataToProcess.items.map((item: any) => ({
           board_id: boardId,
           name: item.itemName,
           position: nextPos++
@@ -615,11 +648,11 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
 
         if (newItems && newItems.length > 0) {
           addedItemIds = newItems.map((item: any) => item.id);
-          
+
           for (let i = 0; i < newItems.length; i++) {
-            const item = addData.items[i];
+            const item = dataToProcess.items[i];
             const itemId = newItems[i].id;
-            
+
             for (const [colId, value] of Object.entries(item.cellValues || {})) {
               let cellValue: any;
               if (typeof value === "string") {
@@ -629,7 +662,7 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
               } else {
                 cellValue = { text: String(value) };
               }
-              
+
               await supabase.from("cell_values").upsert({
                 item_id: itemId,
                 column_id: colId,
@@ -640,55 +673,55 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
         }
       }
     }
-    
+
     // Handle single item add (not in items array)
-    if (addData && boardId && !('items' in addData) && 'itemName' in addData) {
+    if (dataToProcess && boardId && !('items' in dataToProcess) && 'itemName' in dataToProcess) {
       try {
-          // Single item
-          const { data: lastItem } = await supabase
-            .from("items")
-            .select("position")
-            .eq("board_id", boardId)
-            .order("position", { ascending: false })
-            .limit(1)
-            .single();
+        // Single item
+        const { data: lastItem } = await supabase
+          .from("items")
+          .select("position")
+          .eq("board_id", boardId)
+          .order("position", { ascending: false })
+          .limit(1)
+          .single();
 
-          const nextPos = (lastItem?.position || 0) + 1;
+        const nextPos = (lastItem?.position || 0) + 1;
 
-          const { data: newItem } = await supabase
-            .from("items")
-            .insert({ board_id: boardId, name: addData.itemName, position: nextPos })
-            .select("id")
-            .single();
+        const { data: newItem } = await supabase
+          .from("items")
+          .insert({ board_id: boardId, name: dataToProcess.itemName, position: nextPos })
+          .select("id")
+          .single();
 
-          if (newItem) {
-            addedItemId = newItem.id;
-            addedItemIds = [newItem.id];
-            
-            for (const [colId, value] of Object.entries(addData.cellValues || {})) {
-              let cellValue: any;
-              if (typeof value === "string") {
-                cellValue = { text: value };
-              } else if (typeof value === "object" && value !== null) {
-                cellValue = value;
-              } else {
-                cellValue = { text: String(value) };
-              }
-              
-              await supabase.from("cell_values").upsert({
-                item_id: newItem.id,
-                column_id: colId,
-                value: cellValue,
-              });
+        if (newItem) {
+          addedItemId = newItem.id;
+          addedItemIds = [newItem.id];
+
+          for (const [colId, value] of Object.entries(dataToProcess.cellValues || {})) {
+            let cellValue: any;
+            if (typeof value === "string") {
+              cellValue = { text: value };
+            } else if (typeof value === "object" && value !== null) {
+              cellValue = value;
+            } else {
+              cellValue = { text: String(value) };
             }
+
+            await supabase.from("cell_values").upsert({
+              item_id: newItem.id,
+              column_id: colId,
+              value: cellValue,
+            });
           }
+        }
       } catch (dbError) {
         console.error("Add item error:", dbError);
       }
     }
 
     // Include welcome message in response if it's the first interaction
-    const responseMessages = isFirstMessage 
+    const responseMessages = isFirstMessage
       ? [...welcomeMessage, ...messages, assistantMsg]
       : [...messages, assistantMsg];
 
