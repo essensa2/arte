@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabase } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/client'; // Import to resolve TypeScript error
 
 export async function GET(request: Request) {
   const supabase = createServerSupabase();
@@ -52,7 +53,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const supabase = await createClient();
+  const supabase = createServerSupabase(); // Using createServerSupabase for server-side
   const body = await request.json();
 
   if (body.action === 'fix_automation') {
