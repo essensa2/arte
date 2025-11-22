@@ -291,10 +291,22 @@ KRIITILISED REEGLID
    - cellValues peab sisaldama veeru ID-sid, mitte nimesid
 
 ═══════════════════════════════════════════════════════════════
+TEKSTILISED PÄRINGUD (LEIDA JA UUENDADA ÜKSUST)
+═══════════════════════════════════════════════════════════════
+
+Kui kasutaja palub leida üksust nime järgi ja uuendada selle väärtust:
+- Otsi üksust nime järgi (case-insensitive)
+- Kui leiad üksuse, tagasta JSON-vormingus "action": "update_item"
+- Kasuta "itemName" üksuse nime jaoks
+- Kasuta "cellValues" uuendatud väärtuste jaoks (veeru ID-d!)
+- Näide: "Otsi 'ahti urb' ja pane 2025OKT veerule 21"
+  → Tagasta: {"action": "update_item", "itemName": "ahti urb", "cellValues": {"veeru-id": "21"}}
+
+═══════════════════════════════════════════════════════════════
 KUI POLE EKRAANIPILTI
 ═══════════════════════════════════════════════════════════════
 
-Vasta tavaliselt eesti keeles ja aita kasutajal.`;
+Vasta tavaliselt eesti keeles ja aita kasutajal. Kui kasutaja palub leida ja uuendada üksust, tagasta JSON-vormingus suggestedAction.`;
 
     // Add welcome message if this is the first user message
     const isFirstMessage = messages.length === 0 || (messages.length === 1 && messages[0].role === "user");
@@ -342,13 +354,45 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
     console.log("OpenRouter API response status:", res.status);
 
     if (!res.ok) {
-      const err = await res.json();
-      console.error("OpenRouter API error:", err);
+      const errText = await res.text();
+      console.error("OpenRouter API error response:", errText);
+      let err;
+      try {
+        err = JSON.parse(errText);
+      } catch {
+        err = { error: { message: errText } };
+      }
       return NextResponse.json({ error: err.error?.message || "OpenRouter error" }, { status: 500 });
     }
 
     const data = await res.json();
-    const assistantContent = data.choices[0]?.message?.content || "No response";
+    console.log("OpenRouter API response structure:", {
+      hasChoices: !!data.choices,
+      choicesLength: data.choices?.length || 0,
+      firstChoice: data.choices?.[0] ? {
+        hasMessage: !!data.choices[0].message,
+        messageKeys: data.choices[0].message ? Object.keys(data.choices[0].message) : [],
+        hasContent: !!data.choices[0].message?.content
+      } : null
+    });
+
+    if (!data.choices || data.choices.length === 0) {
+      console.error("No choices in OpenRouter response:", JSON.stringify(data, null, 2));
+      return NextResponse.json({ 
+        error: "No response from AI model",
+        details: data 
+      }, { status: 500 });
+    }
+
+    const assistantContent = data.choices[0]?.message?.content;
+    
+    if (!assistantContent) {
+      console.error("No content in assistant message:", JSON.stringify(data.choices[0], null, 2));
+      return NextResponse.json({ 
+        error: "AI model returned empty response",
+        details: data.choices[0] 
+      }, { status: 500 });
+    }
 
     // Log for debugging
     if (hasImage) {
@@ -368,7 +412,7 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
           // Extract the JSON string and trim it
           const jsonStr = codeBlockMatch[1].trim();
           const parsed = JSON.parse(jsonStr);
-          if (parsed.action === "add_item" && parsed.itemName && parsed.cellValues) {
+          if ((parsed.action === "add_item" || parsed.action === "update_item") && parsed.itemName && parsed.cellValues) {
             suggestedAction = parsed;
           } else if ((parsed.action === "add_items" || parsed.action === "update_or_add_items") && Array.isArray(parsed.items) && parsed.items.length > 0) {
             suggestedAction = parsed;
@@ -397,7 +441,7 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
         if (jsonMatch) {
           try {
             const parsed = JSON.parse(jsonMatch[0]);
-            if (parsed.action === "add_item" && parsed.itemName && parsed.cellValues) {
+            if ((parsed.action === "add_item" || parsed.action === "update_item") && parsed.itemName && parsed.cellValues) {
               suggestedAction = parsed;
             } else if ((parsed.action === "add_items" || parsed.action === "update_or_add_items") && Array.isArray(parsed.items) && parsed.items.length > 0) {
               suggestedAction = parsed;
@@ -464,15 +508,33 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
         console.warn("⚠️ Image detected but no suggestedAction extracted. Response:", assistantContent.substring(0, 300));
       }
     } else {
-      // For non-image messages, use simpler extraction
-      const jsonMatch = assistantContent.match(/\{[\s\S]*?"action"[\s\S]*?\}/);
-      if (jsonMatch) {
+      // For non-image messages, try multiple extraction strategies
+      // Strategy 1: Look for JSON in code blocks
+      const codeBlockMatch = assistantContent.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (codeBlockMatch) {
         try {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (parsed.action === "add_item" && parsed.itemName && parsed.cellValues) {
+          const parsed = JSON.parse(codeBlockMatch[1].trim());
+          if ((parsed.action === "add_item" || parsed.action === "update_item") && parsed.itemName && parsed.cellValues) {
+            suggestedAction = parsed;
+          } else if ((parsed.action === "add_items" || parsed.action === "update_or_add_items") && Array.isArray(parsed.items) && parsed.items.length > 0) {
             suggestedAction = parsed;
           }
         } catch { }
+      }
+      
+      // Strategy 2: Look for standalone JSON objects
+      if (!suggestedAction) {
+        const jsonMatch = assistantContent.match(/\{[\s\S]*?"action"[\s\S]*?\}/);
+        if (jsonMatch) {
+          try {
+            const parsed = JSON.parse(jsonMatch[0]);
+            if ((parsed.action === "add_item" || parsed.action === "update_item") && parsed.itemName && parsed.cellValues) {
+              suggestedAction = parsed;
+            } else if ((parsed.action === "add_items" || parsed.action === "update_or_add_items") && Array.isArray(parsed.items) && parsed.items.length > 0) {
+              suggestedAction = parsed;
+            }
+          } catch { }
+        }
       }
     }
 
@@ -517,11 +579,15 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
           displayContent = `Leidsin pildilt ${action.items.length} üksust. Lisan need tabelisse.`;
         } else if (action.action === 'add_item' && action.itemName) {
           displayContent = `Leidsin üksuse "${action.itemName}". Lisan selle tabelisse.`;
+        } else if (action.action === 'update_item' && action.itemName) {
+          displayContent = `Leidsin üksuse "${action.itemName}". Uuendan selle väärtusi.`;
         } else {
           displayContent = "Analüüsisin pildi ja eraldasin andmed. Uuendan tabelit.";
         }
       } else {
-        displayContent = "Analüüsisin pildi. Kui leidsin andmeid, näed neid tabelis.";
+        displayContent = hasImage 
+          ? "Analüüsisin pildi. Kui leidsin andmeid, näed neid tabelis."
+          : "Vastasin sinu päringule. Kui leidsin andmeid, näed neid tabelis.";
       }
     }
 
@@ -674,49 +740,124 @@ Vasta tavaliselt eesti keeles ja aita kasutajal.`;
       }
     }
 
-    // Handle single item add (not in items array)
+    // Handle single item update or add (not in items array)
     if (dataToProcess && boardId && !('items' in dataToProcess) && 'itemName' in dataToProcess) {
       try {
-        // Single item
-        const { data: lastItem } = await supabase
-          .from("items")
-          .select("position")
-          .eq("board_id", boardId)
-          .order("position", { ascending: false })
-          .limit(1)
-          .single();
+        const actionType = (dataToProcess as any).action || 'add_item';
+        const itemName = dataToProcess.itemName?.trim();
+        
+        if (actionType === 'update_item' && itemName) {
+          // Find existing item by name (case-insensitive)
+          const { data: existingItems } = await supabase
+            .from("items")
+            .select("id, name")
+            .eq("board_id", boardId)
+            .ilike("name", itemName)
+            .limit(1);
 
-        const nextPos = (lastItem?.position || 0) + 1;
+          if (existingItems && existingItems.length > 0) {
+            const existingItemId = existingItems[0].id;
+            updatedItemIds.push(existingItemId);
 
-        const { data: newItem } = await supabase
-          .from("items")
-          .insert({ board_id: boardId, name: dataToProcess.itemName, position: nextPos })
-          .select("id")
-          .single();
+            // Update cell values
+            for (const [colId, value] of Object.entries(dataToProcess.cellValues || {})) {
+              let cellValue: any;
+              if (typeof value === "string") {
+                cellValue = { text: value };
+              } else if (typeof value === "object" && value !== null) {
+                cellValue = value;
+              } else {
+                cellValue = { text: String(value) };
+              }
 
-        if (newItem) {
-          addedItemId = newItem.id;
-          addedItemIds = [newItem.id];
-
-          for (const [colId, value] of Object.entries(dataToProcess.cellValues || {})) {
-            let cellValue: any;
-            if (typeof value === "string") {
-              cellValue = { text: value };
-            } else if (typeof value === "object" && value !== null) {
-              cellValue = value;
-            } else {
-              cellValue = { text: String(value) };
+              await supabase.rpc('upsert_cell_value', {
+                p_item_id: existingItemId,
+                p_column_id: colId,
+                p_value: cellValue
+              });
             }
+          } else {
+            // Item not found, create new one
+            const { data: lastItem } = await supabase
+              .from("items")
+              .select("position")
+              .eq("board_id", boardId)
+              .order("position", { ascending: false })
+              .limit(1)
+              .single();
 
-            await supabase.from("cell_values").upsert({
-              item_id: newItem.id,
-              column_id: colId,
-              value: cellValue,
-            });
+            const nextPos = (lastItem?.position || 0) + 1;
+
+            const { data: newItem } = await supabase
+              .from("items")
+              .insert({ board_id: boardId, name: itemName, position: nextPos })
+              .select("id")
+              .single();
+
+            if (newItem) {
+              addedItemId = newItem.id;
+              addedItemIds = [newItem.id];
+
+              for (const [colId, value] of Object.entries(dataToProcess.cellValues || {})) {
+                let cellValue: any;
+                if (typeof value === "string") {
+                  cellValue = { text: value };
+                } else if (typeof value === "object" && value !== null) {
+                  cellValue = value;
+                } else {
+                  cellValue = { text: String(value) };
+                }
+
+                await supabase.rpc('upsert_cell_value', {
+                  p_item_id: newItem.id,
+                  p_column_id: colId,
+                  p_value: cellValue
+                });
+              }
+            }
+          }
+        } else {
+          // Original add_item logic
+          const { data: lastItem } = await supabase
+            .from("items")
+            .select("position")
+            .eq("board_id", boardId)
+            .order("position", { ascending: false })
+            .limit(1)
+            .single();
+
+          const nextPos = (lastItem?.position || 0) + 1;
+
+          const { data: newItem } = await supabase
+            .from("items")
+            .insert({ board_id: boardId, name: dataToProcess.itemName, position: nextPos })
+            .select("id")
+            .single();
+
+          if (newItem) {
+            addedItemId = newItem.id;
+            addedItemIds = [newItem.id];
+
+            for (const [colId, value] of Object.entries(dataToProcess.cellValues || {})) {
+              let cellValue: any;
+              if (typeof value === "string") {
+                cellValue = { text: value };
+              } else if (typeof value === "object" && value !== null) {
+                cellValue = value;
+              } else {
+                cellValue = { text: String(value) };
+              }
+
+              await supabase.rpc('upsert_cell_value', {
+                p_item_id: newItem.id,
+                p_column_id: colId,
+                p_value: cellValue
+              });
+            }
           }
         }
       } catch (dbError) {
-        console.error("Add item error:", dbError);
+        console.error("Add/update item error:", dbError);
       }
     }
 
