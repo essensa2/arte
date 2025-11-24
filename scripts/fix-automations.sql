@@ -4,12 +4,15 @@
 -- STEP 1: First, make sure app_config has the correct webhook URL
 -- Update these values with your actual Supabase project details
 UPDATE public.app_config
-SET value = 'https://ansgfdskcvfitzerddjs.supabase.co/functions/v1'
+SET value = 'https://YOUR-PROJECT-REF.supabase.co/functions/v1'
 WHERE key = 'SUPABASE_FUNCTIONS_URL';
+-- IMPORTANT: Replace 'YOUR-PROJECT-REF' with your actual Supabase project reference
 
 UPDATE public.app_config
-SET value = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFuc2dmZHNrY3ZmaXR6ZXJkZGpzIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MzI3NjE0MywiZXhwIjoyMDc4ODUyMTQzfQ.RXM8BZuPRazIe-NR2PhFW9cOnVtYmyN7fKXsEI7vzA8'
+SET value = 'YOUR-SERVICE-ROLE-KEY-HERE'
 WHERE key = 'SUPABASE_SERVICE_ROLE_KEY';
+-- IMPORTANT: Replace 'YOUR-SERVICE-ROLE-KEY-HERE' with your actual service role key from Supabase Dashboard > Settings > API
+-- NEVER commit the actual service role key to git!
 
 -- STEP 2: Find the correct column_id for your status column
 -- Run this query first to find the column_id of your "status" column:
