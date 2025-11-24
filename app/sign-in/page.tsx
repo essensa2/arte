@@ -62,7 +62,7 @@ export default function SignInPage() {
           {error && <p className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">{error}</p>}
           <div className="space-y-3">
             <Button
-              variant="primary"
+              variant="default"
               type="submit"
               disabled={loading}
               className="w-full"
