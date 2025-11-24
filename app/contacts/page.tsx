@@ -7,11 +7,20 @@ import { BoardTable } from '@/components/board/BoardTable';
 const CONTACTS_BOARD_ID = 'eeb8bc91-f7ad-414e-966a-a7c287d9a6b0';
 
 export default async function ContactsPage() {
-  const cookieStore = cookies();
-  const supabase = createServerSupabase(cookieStore);
+  const supabase = createServerSupabase();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) redirect('/sign-in');
+
+  const { data: board } = await supabase
+    .from('boards')
+    .select('workspace_id')
+    .eq('id', CONTACTS_BOARD_ID)
+    .single();
+
+  if (!board) {
+    return <div>Board not found</div>;
+  }
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
@@ -37,7 +46,7 @@ export default async function ContactsPage() {
               📋 Contacts Board (Live)
               <span className="text-sm text-green-500 font-medium">Auto-updates</span>
             </h2>
-            <BoardTable boardId={CONTACTS_BOARD_ID} />
+            <BoardTable boardId={CONTACTS_BOARD_ID} workspaceId={board.workspace_id} />
           </div>
         </div>
       </div>
