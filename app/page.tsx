@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { PWAInstallButton } from '@/components/PWAInstallButton';
 
 export default function HomePage() {
   return (
@@ -10,7 +11,7 @@ export default function HomePage() {
             A powerful board and table management system with automations.
             Create workspaces, organize your boards, and automate your workflows.
           </p>
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-4">
             <Link
               href="/sign-in"
               className="rounded-md bg-primary px-6 py-3 text-primary-foreground hover:opacity-90 font-medium"
@@ -23,6 +24,7 @@ export default function HomePage() {
             >
               View Workspaces
             </Link>
+            <PWAInstallButton />
           </div>
         </div>
       </div>

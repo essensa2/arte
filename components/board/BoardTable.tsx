@@ -20,10 +20,13 @@ import {
 import {
   SortableContext,
   verticalListSortingStrategy,
+  horizontalListSortingStrategy,
+  arrayMove,
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import Link from 'next/link';
+import { SortableColumnHeader } from './SortableColumnHeader';
 
 type Column = {
   id: string;
@@ -217,7 +220,7 @@ export function BoardTable(props: Props) {
     // Use database function to handle JSONB null correctly
     // The function will convert SQL NULL to JSONB null
     let jsonbValue: any = value;
-    
+
     // If value is null/undefined, pass null and let the database function handle it
     // Otherwise, pass the value as-is (Supabase will convert to JSONB)
     if (value === null || value === undefined) {
@@ -402,6 +405,43 @@ export function BoardTable(props: Props) {
     }
   }
 
+  async function onMoveColumn(activeId: string, overId: string) {
+    const oldIndex = columns.findIndex((c) => c.id === activeId);
+    const newIndex = columns.findIndex((c) => c.id === overId);
+
+    if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+
+    // Optimistic update
+    const newColumns = arrayMove(columns, oldIndex, newIndex);
+    setColumns(newColumns);
+
+    // Update positions in database
+    // We need to update positions for all affected columns
+    // A simple way is to update all columns with their new index
+    const updates = newColumns.map((col, index) => ({
+      id: col.id,
+      position: index,
+    }));
+
+    // We can't update all at once easily with a single query unless we use an RPC or multiple updates
+    // For now, let's just update the changed ones. 
+    // Actually, to be safe and simple, updating the moved column and shifting others is tricky in SQL without a stored proc.
+    // But since we have the full list, we can just update the position of the moved column and any column that swapped.
+    // However, arrayMove shifts things.
+    // Let's iterate and update all positions that changed.
+
+    const changedColumns = updates.filter((u, i) => columns[i].id !== u.id || columns[i].position !== u.position);
+
+    // To avoid unique constraint violations if we had them (we might not on position), 
+    // but usually position isn't unique.
+
+    for (const update of updates) {
+      if (columns.find(c => c.id === update.id)?.position !== update.position) {
+        await supabase.from('columns').update({ position: update.position }).eq('id', update.id);
+      }
+    }
+  }
+
 
   function handleDragStart(event: DragStartEvent) {
     setActiveId(event.active.id as string);
@@ -412,6 +452,13 @@ export function BoardTable(props: Props) {
     setActiveId(null);
 
     if (!over || active.id === over.id) return;
+
+    // Check if it's a column drag
+    const isColumnDrag = columns.some(c => c.id === active.id);
+    if (isColumnDrag) {
+      await onMoveColumn(active.id as string, over.id as string);
+      return;
+    }
 
     const activeItem = items.find((i) => i.id === active.id);
     if (!activeItem) return;
@@ -750,60 +797,30 @@ export function BoardTable(props: Props) {
                 <th className="sticky left-[40px] z-20 w-[250px] border-r border-border bg-background px-4 py-3 text-left font-medium text-muted-foreground">
                   Item
                 </th>
-                {columns.filter(col => !col.hidden).map((col) => (
-                  <th
-                    key={col.id}
-                    className="border-r border-border px-4 py-3 text-left font-medium text-muted-foreground group relative resize-x overflow-auto"
-                    style={{ width: `${col.width}px`, minWidth: `${col.width}px` }}
-                  >
-                    <div className="flex items-center justify-between">
-                      {editingColumnId === col.id ? (
-                        <input
-                          className="w-full rounded border px-2 py-1 text-sm text-foreground"
-                          autoFocus
-                          value={editingColumnName}
-                          onChange={(e) => setEditingColumnName(e.target.value)}
-                          onBlur={() => onRenameColumn(col.id, editingColumnName)}
-                          onKeyDown={(e) => e.key === 'Enter' && onRenameColumn(col.id, editingColumnName)}
-                        />
-                      ) : (
-                        <span
-                          className="cursor-pointer hover:text-primary"
-                          onClick={() => {
-                            setEditingColumnId(col.id);
-                            setEditingColumnName(col.name);
-                          }}
-                        >
-                          {col.name}
-                        </span>
-                      )}
-                    </div>
-                    <div className="absolute right-1 top-1 hidden group-hover:flex gap-1 bg-background p-1 shadow-sm rounded border border-border">
-                      <select
-                        className="text-xs border rounded px-1"
-                        value={col.type}
-                        onChange={(e) => onChangeColumnType(col.id, e.target.value as any)}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <option value="text">Text</option>
-                        <option value="status">Status</option>
-                        <option value="number">Number</option>
-                        <option value="money">Money</option>
-                        <option value="date">Date</option>
-                        <option value="email">Email</option>
-                        <option value="phone">Phone</option>
-                        <option value="checkbox">Checkbox</option>
-                      </select>
+                <SortableContext items={columns.map(c => c.id)} strategy={horizontalListSortingStrategy}>
+                  {columns.filter(col => !col.hidden).map((col) => (
+                    <SortableColumnHeader
+                      key={col.id}
+                      id={col.id}
+                      column={col}
+                      width={col.width}
+                      isEditing={editingColumnId === col.id}
+                      editingName={editingColumnName}
+                      setEditingName={setEditingColumnName}
+                      onRename={onRenameColumn}
+                      setEditingColumnId={setEditingColumnId}
+                      setEditingColumnName={setEditingColumnName}
+                      onChangeColumnType={onChangeColumnType}
+                    >
                       {col.type === 'status' && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             onOpenStatusEditor(col.id);
                           }}
-                          className="hover:bg-muted rounded px-1 text-xs"
-                          title="Edit status options"
+                          className="text-xs border rounded px-1 hover:bg-muted"
                         >
-                          ⚙️
+                          Options
                         </button>
                       )}
                       <button
@@ -811,7 +828,7 @@ export function BoardTable(props: Props) {
                           e.stopPropagation();
                           onToggleColumnVisibility(col.id);
                         }}
-                        className="hover:bg-muted rounded px-1 text-xs"
+                        className="text-xs border rounded px-1 hover:bg-muted"
                         title="Hide column"
                       >
                         👁️
@@ -821,14 +838,14 @@ export function BoardTable(props: Props) {
                           e.stopPropagation();
                           onDeleteColumn(col.id);
                         }}
-                        className="text-destructive hover:bg-destructive/10 rounded px-1 text-xs"
+                        className="text-xs border rounded px-1 hover:bg-destructive hover:text-destructive-foreground"
                         title="Delete column"
                       >
                         ×
                       </button>
-                    </div>
-                  </th>
-                ))}
+                    </SortableColumnHeader>
+                  ))}
+                </SortableContext>
               </tr>
             </thead>
             <tbody>
@@ -879,6 +896,8 @@ export function BoardTable(props: Props) {
                           }
                           setSelectedItems(newSelected);
                         }}
+                        columns={columns.filter(c => !c.hidden)}
+                        cellValues={cellValues}
                       />
                       {!group.collapsed && (
                         <SortableContext
@@ -969,6 +988,29 @@ export function BoardTable(props: Props) {
                 </>
               )}
             </tbody>
+            <tfoot className="bg-muted/80 border-t-2 border-border font-semibold">
+              <tr>
+                <td colSpan={2} className="px-4 py-3 text-right sticky left-0 z-10 bg-muted/80">
+                  Grand Total
+                </td>
+                {columns.filter(c => !c.hidden).map(col => {
+                  if (col.type === 'number' || col.type === 'money') {
+                    const sum = items.reduce((acc, item) => {
+                      const val = cellValues[item.id]?.[col.id];
+                      const num = typeof val === 'number' ? val : parseFloat(String(val));
+                      return acc + (isNaN(num) ? 0 : num);
+                    }, 0);
+
+                    return (
+                      <td key={col.id} className="px-4 py-3 text-right">
+                        {col.type === 'money' ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(sum) : sum}
+                      </td>
+                    );
+                  }
+                  return <td key={col.id}></td>;
+                })}
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
@@ -1052,6 +1094,8 @@ function GroupHeader({
   groupItems,
   selectedItems,
   onSelectAllInGroup,
+  columns,
+  cellValues,
 }: {
   group: Group;
   itemCount: number;
@@ -1070,6 +1114,8 @@ function GroupHeader({
   groupItems: Item[];
   selectedItems: Set<string>;
   onSelectAllInGroup: () => void;
+  columns: Column[];
+  cellValues: Record<string, Record<string, any>>;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useSortable({
     id: group.id,
@@ -1134,8 +1180,8 @@ function GroupHeader({
       }}
     >
       <td
-        colSpan={columnCount + 1}
-        className="px-4 py-2 font-medium border-b border-border"
+        colSpan={2}
+        className="px-4 py-2 font-medium border-b border-border sticky left-0 z-10 bg-muted/50"
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -1233,6 +1279,23 @@ function GroupHeader({
           </div>
         </div>
       </td>
+      {/* Render group sums for columns */}
+      {columns.map(col => {
+        if (col.type === 'number' || col.type === 'money') {
+          const sum = groupItems.reduce((acc, item) => {
+            const val = cellValues[item.id]?.[col.id];
+            const num = typeof val === 'number' ? val : parseFloat(String(val));
+            return acc + (isNaN(num) ? 0 : num);
+          }, 0);
+
+          return (
+            <td key={col.id} className="px-4 py-2 border-b border-border text-right font-medium text-muted-foreground text-xs">
+              {col.type === 'money' ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(sum) : sum}
+            </td>
+          );
+        }
+        return <td key={col.id} className="border-b border-border"></td>;
+      })}
     </tr>
   );
 }
@@ -1554,8 +1617,7 @@ function GroupSelectionModal({
           <div className="space-y-2">
             <button
               onClick={() => setSelectedGroupId(null)}
-                className={`w-full text-left px-4 py-3 rounded-md border-2 transition-colors ${
-                  selectedGroupId === null
+              className={`w-full text-left px-4 py-3 rounded-md border-2 transition-colors ${selectedGroupId === null
                 ? 'border-primary bg-primary/10'
                 : 'border-border hover:bg-muted'
                 }`}
@@ -1567,8 +1629,7 @@ function GroupSelectionModal({
               <button
                 key={group.id}
                 onClick={() => setSelectedGroupId(group.id)}
-                  className={`w-full text-left px-4 py-3 rounded-md border-2 transition-colors ${
-                    selectedGroupId === group.id
+                className={`w-full text-left px-4 py-3 rounded-md border-2 transition-colors ${selectedGroupId === group.id
                   ? 'border-primary bg-primary/10'
                   : 'border-border hover:bg-muted'
                   }`}
@@ -1587,27 +1648,21 @@ function GroupSelectionModal({
         <div className="px-6 py-4 border-t border-border flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-md border border-border hover:bg-muted text-sm"
+            className="px-4 py-2 rounded-md border border-input hover:bg-muted text-sm font-medium"
           >
             Cancel
           </button>
           <button
-            onClick={() => {
-              if (selectedGroupId !== undefined) {
-                onSelect(selectedGroupId);
-              }
-            }}
+            onClick={() => onSelect(selectedGroupId === undefined ? null : selectedGroupId)}
             disabled={selectedGroupId === undefined}
-            className="px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Move
+            Move Items
           </button>
         </div>
       </div>
-      </div>
-    ),
-    document.body
-  );
+    </div>
+  ), document.body);
 }
 
 // Status Selection Modal
@@ -1630,7 +1685,7 @@ function StatusSelectionModal({
       { label: 'Working on it', color: '#fdab3d' },
       { label: 'Stuck', color: '#e2445c' }
     ];
-  
+
   // Add default "Status..." option (null/empty status)
   // Use a special symbol to represent null status selection
   const STATUS_NULL = '__NULL__';
@@ -1668,8 +1723,7 @@ function StatusSelectionModal({
               <button
                 key={option.label}
                 onClick={() => setSelectedStatus(option.value)}
-                className={`w-full text-left px-4 py-3 rounded-md border-2 transition-colors ${
-                  selectedStatus === option.value
+                className={`w-full text-left px-4 py-3 rounded-md border-2 transition-colors ${selectedStatus === option.value
                   ? 'border-primary bg-primary/10'
                   : 'border-border hover:bg-muted'
                   }`}
@@ -1694,6 +1748,7 @@ function StatusSelectionModal({
           </button>
           <button
             onClick={() => {
+              if (selectedStatus === undefined) return;
               // Convert STATUS_NULL to null, otherwise pass the status string
               const statusToSet = selectedStatus === STATUS_NULL ? null : selectedStatus;
               onSelect(statusToSet);

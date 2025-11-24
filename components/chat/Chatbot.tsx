@@ -11,8 +11,13 @@ import { Upload, ImageIcon, Send } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
-  content: string | { type: "text"; text: string }[] | { type: "image_url"; image_url: { url: string } };
-  suggestedAction?: { action: string; itemName: string; cellValues: Record<string, any> };
+  content: string | ({ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } })[];
+  suggestedAction?: {
+    action: string;
+    itemName?: string;
+    items?: Array<{ itemName: string; cellValues: Record<string, any> }>;
+    cellValues?: Record<string, any>;
+  };
 }
 
 export function BoardChatbot({ boardId, onClose }: { boardId: string; onClose?: () => void }) {
@@ -20,13 +25,14 @@ export function BoardChatbot({ boardId, onClose }: { boardId: string; onClose?: 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [hasWelcomed, setHasWelcomed] = useState(false);
-  const [suggestedAction, setSuggestedAction] = useState<{ 
-    action: string; 
-    itemName?: string; 
+  const [suggestedAction, setSuggestedAction] = useState<{
+    action: string;
+    itemName?: string;
     items?: Array<{ itemName: string; cellValues: Record<string, any> }>;
-    cellValues?: Record<string, any> 
+    cellValues?: Record<string, any>
   } | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const supabase = createClient();
@@ -86,7 +92,8 @@ export function BoardChatbot({ boardId, onClose }: { boardId: string; onClose?: 
     setDragActive(false);
     const file = e.dataTransfer.files[0];
     if (file?.type.startsWith("image/")) {
-      await sendWithImage(file);
+      const base64 = await processImage(file);
+      setPendingImage(base64);
     }
   }, []);
 
@@ -97,43 +104,39 @@ export function BoardChatbot({ boardId, onClose }: { boardId: string; onClose?: 
       e.preventDefault();
       const file = imageItem.getAsFile();
       if (file) {
-        await sendWithImage(file);
+        const base64 = await processImage(file);
+        setPendingImage(base64);
       }
     }
     // Non-image pastes (text) proceed with default input paste behavior
   };
 
-  const sendWithImage = async (file: File) => {
-    const base64 = await processImage(file);
-    const userContent = [
-      { type: "text" as const, text: input.trim() || "Analyze screenshot for board data." },
-      { type: "image_url" as const, image_url: { url: base64 } }
-    ];
-    const userMsg: Message = { role: "user", content: userContent };
-    const newMessages = [...messages, userMsg];
-    setMessages(newMessages);
-    setInput("");
-    await sendApi(newMessages);
-  };
-
   const sendMessage = async () => {
-    if (!input.trim() && !fileInputRef.current?.files?.[0]) return;
-    const file = fileInputRef.current?.files?.[0];
+    if (!input.trim() && !pendingImage && !fileInputRef.current?.files?.[0]) return;
+
     let userContent: Message["content"];
-    if (file) {
-      const base64 = await processImage(file);
+    let base64 = pendingImage;
+
+    // Check file input if no pending image from paste/drop
+    if (!base64 && fileInputRef.current?.files?.[0]) {
+      base64 = await processImage(fileInputRef.current.files[0]);
+    }
+
+    if (base64) {
       userContent = [
-        { type: "text" as const, text: input.trim() || "Screenshot uploaded." },
+        { type: "text" as const, text: input.trim() || "Analyze screenshot for board data." },
         { type: "image_url" as const, image_url: { url: base64 } }
       ];
     } else {
       userContent = input.trim() || "Message sent.";
     }
+
     const userMsg: Message = { role: "user", content: userContent };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput("");
-    fileInputRef.current!.value = "";
+    setPendingImage(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     await sendApi(newMessages);
   };
 
@@ -150,7 +153,26 @@ export function BoardChatbot({ boardId, onClose }: { boardId: string; onClose?: 
       if (!res.ok) throw new Error(data.error || "API error");
       const newMsgs = data.messages || [];
       setMessages(prev => [...prev, ...newMsgs.slice(-1)]);
-      if (data.suggestedAction) setSuggestedAction(data.suggestedAction);
+
+      // Check if items were automatically added/updated
+      if (data.addedItemIds?.length > 0 || data.updatedItemIds?.length > 0) {
+        const updatedCount = data.updatedItemIds?.length || 0;
+        const addedCount = data.addedItemIds?.length || 0;
+
+        if (addedCount > 0 && updatedCount > 0) {
+          toast.success(`${updatedCount} üksust uuendatud, ${addedCount} uut lisatud!`);
+        } else if (updatedCount > 0) {
+          toast.success(`${updatedCount} ${updatedCount === 1 ? 'üksus' : 'üksust'} uuendatud!`);
+        } else if (addedCount > 0) {
+          toast.success(`${addedCount} ${addedCount === 1 ? 'üksus' : 'üksust'} lisatud!`);
+        }
+
+        // Reload to show changes
+        window.location.reload();
+      } else if (data.suggestedAction) {
+        // Only set suggested action if NOT automatically processed
+        setSuggestedAction(data.suggestedAction);
+      }
     } catch (error) {
       toast.error((error as Error).message);
       setMessages(prev => [...prev, { role: "assistant", content: "Vabandust, tekkis viga." }]);
@@ -201,9 +223,8 @@ export function BoardChatbot({ boardId, onClose }: { boardId: string; onClose?: 
       <ScrollArea className="flex-1 p-4 space-y-4">
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`p-3 rounded-lg max-w-[85%] ${
-              msg.role === "user" ? "bg-blue-500 text-white" : "bg-muted"
-            }`}>
+            <div className={`p-3 rounded-lg max-w-[85%] ${msg.role === "user" ? "bg-blue-500 text-white" : "bg-muted"
+              }`}>
               {typeof msg.content === "string" ? msg.content : (
                 <div>
                   {Array.isArray(msg.content) && msg.content.map((part, j) => (
@@ -231,7 +252,7 @@ export function BoardChatbot({ boardId, onClose }: { boardId: string; onClose?: 
       {suggestedAction && (
         <div className="p-4 border-t bg-green-50">
           <div className="text-sm mb-2">
-            {suggestedAction.action === "add_items" 
+            {suggestedAction.action === "add_items"
               ? `Lisa ${suggestedAction.items?.length || 0} üksust tabelisse:`
               : "Lisa tabelisse:"}
           </div>
@@ -270,16 +291,15 @@ export function BoardChatbot({ boardId, onClose }: { boardId: string; onClose?: 
             ➕ {suggestedAction.action === "update_or_add_items"
               ? `Uuenda/Lisa ${suggestedAction.items?.length || 0} üksust`
               : suggestedAction.action === "add_items"
-              ? `Lisa ${suggestedAction.items?.length || 0} üksust`
-              : "Lisa üksus"}
+                ? `Lisa ${suggestedAction.items?.length || 0} üksust`
+                : "Lisa üksus"}
           </Button>
         </div>
       )}
 
-      <div 
-        className={`p-4 border-t flex gap-2 items-center transition-all ${
-          dragActive ? "border-2 border-dashed border-blue-400 bg-blue-50" : ""
-        }`}
+      <div
+        className={`p-4 border-t flex gap-2 items-center transition-all ${dragActive ? "border-2 border-dashed border-blue-400 bg-blue-50" : ""
+          }`}
         onDragEnter={handleDrag}
         onDragLeave={handleDrag}
         onDragOver={handleDrag}
@@ -290,7 +310,24 @@ export function BoardChatbot({ boardId, onClose }: { boardId: string; onClose?: 
           type="file"
           accept="image/*"
           className="hidden"
+          onChange={async (e) => {
+            if (e.target.files?.[0]) {
+              const base64 = await processImage(e.target.files[0]);
+              setPendingImage(base64);
+            }
+          }}
         />
+        {pendingImage && (
+          <div className="relative mr-2">
+            <img src={pendingImage} alt="Pending" className="h-10 w-10 object-cover rounded border" />
+            <button
+              onClick={() => setPendingImage(null)}
+              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
