@@ -101,7 +101,7 @@ export default function BoardsPage() {
             className="mt-1 w-full rounded-md border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
-        <Button variant="primary" type="submit">
+        <Button variant="default" type="submit">
           Create
         </Button>
       </form>
