@@ -699,21 +699,23 @@ export function BoardTable(props: Props) {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="p-4">
-        <div className="mb-4 flex gap-2 items-center justify-between">
-          <div className="flex gap-2 items-center">
-            <button onClick={() => onAddItem(null)} className="rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90 text-sm font-medium">
-              + New Item
-            </button>
-            <button onClick={onAddGroup} className="rounded-md border border-input px-4 py-2 hover:bg-muted text-sm font-medium">
-              + New Group
-            </button>
-            <button onClick={onAddColumn} className="rounded-md border border-input px-4 py-2 hover:bg-muted text-sm font-medium">
-              + New Column
-            </button>
-            <div className="relative ml-2">
+      <div className="p-2 sm:p-4">
+        <div className="mb-4 flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center flex-1">
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => onAddItem(null)} className="rounded-md bg-primary px-3 sm:px-4 py-1.5 sm:py-2 text-primary-foreground hover:bg-primary/90 text-xs sm:text-sm font-medium whitespace-nowrap">
+                + New Item
+              </button>
+              <button onClick={onAddGroup} className="rounded-md border border-input px-3 sm:px-4 py-1.5 sm:py-2 hover:bg-muted text-xs sm:text-sm font-medium whitespace-nowrap">
+                + New Group
+              </button>
+              <button onClick={onAddColumn} className="rounded-md border border-input px-3 sm:px-4 py-1.5 sm:py-2 hover:bg-muted text-xs sm:text-sm font-medium whitespace-nowrap">
+                + New Column
+              </button>
+            </div>
+            <div className="relative flex-1 sm:ml-2 sm:max-w-xs">
               <svg
-                className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none"
+                className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -730,7 +732,7 @@ export function BoardTable(props: Props) {
                 placeholder="Search items..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="rounded-md border border-input pl-9 pr-8 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                className="rounded-md border border-input pl-8 sm:pl-9 pr-8 py-1.5 sm:py-2 text-xs sm:text-sm w-full focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
               {searchQuery && (
                 <button
@@ -743,58 +745,60 @@ export function BoardTable(props: Props) {
               )}
             </div>
             {searchQuery && (
-              <span className="text-sm text-muted-foreground">
+              <span className="text-xs sm:text-sm text-muted-foreground whitespace-nowrap">
                 {filteredItems.length} {filteredItems.length === 1 ? 'result' : 'results'}
               </span>
             )}
           </div>
           {showMassActions && (
-            <div className="flex gap-2 items-center bg-primary/10 border border-primary/20 rounded-md px-4 py-2">
-              <span className="text-sm font-medium text-primary">{selectedItems.size} selected</span>
-              <div className="h-4 w-px bg-border mx-2"></div>
-              <button
-                onClick={openStatusModal}
-                className="rounded-md border border-primary/30 bg-background px-3 py-1.5 text-sm hover:bg-muted"
-              >
-                Set Status
-              </button>
-              <button
-                onClick={openGroupModal}
-                className="rounded-md border border-primary/30 bg-background px-3 py-1.5 text-sm hover:bg-muted"
-              >
-                Move to Group
-              </button>
-              <button
-                onClick={handleMassDelete}
-                className="rounded-md border border-destructive/30 bg-background px-3 py-1.5 text-sm hover:bg-destructive/10 text-destructive"
-              >
-                Delete
-              </button>
-              <button
-                onClick={() => setSelectedItems(new Set())}
-                className="rounded-md px-3 py-1.5 text-sm hover:bg-muted text-muted-foreground"
-                title="Clear selection"
-              >
-                ×
-              </button>
+            <div className="flex flex-wrap gap-2 items-center bg-primary/10 border border-primary/20 rounded-md px-2 sm:px-4 py-2">
+              <span className="text-xs sm:text-sm font-medium text-primary whitespace-nowrap">{selectedItems.size} selected</span>
+              <div className="hidden sm:block h-4 w-px bg-border mx-2"></div>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={openStatusModal}
+                  className="rounded-md border border-primary/30 bg-background px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm hover:bg-muted whitespace-nowrap"
+                >
+                  Set Status
+                </button>
+                <button
+                  onClick={openGroupModal}
+                  className="rounded-md border border-primary/30 bg-background px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm hover:bg-muted whitespace-nowrap"
+                >
+                  Move to Group
+                </button>
+                <button
+                  onClick={handleMassDelete}
+                  className="rounded-md border border-destructive/30 bg-background px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm hover:bg-destructive/10 text-destructive whitespace-nowrap"
+                >
+                  Delete
+                </button>
+                <button
+                  onClick={() => setSelectedItems(new Set())}
+                  className="rounded-md px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm hover:bg-muted text-muted-foreground"
+                  title="Clear selection"
+                >
+                  ×
+                </button>
+              </div>
             </div>
           )}
         </div>
 
-        <div className="overflow-x-auto rounded-lg border border-border bg-surface shadow-card">
-          <table className="min-w-full border-collapse text-sm">
+        <div className="overflow-x-auto rounded-lg border border-border bg-surface shadow-card -mx-2 sm:mx-0">
+          <table className="min-w-full border-collapse text-xs sm:text-sm">
             <thead className="sticky top-0 z-10 bg-background">
               <tr className="border-b border-border">
-                <th className="sticky left-0 z-20 w-[40px] border-r border-border bg-background px-2 py-3 text-center">
+                <th className="sticky left-0 z-20 w-[36px] sm:w-[40px] border-r border-border bg-background px-1 sm:px-2 py-2 sm:py-3 text-center">
                   <input
                     type="checkbox"
                     checked={items.length > 0 && selectedItems.size === items.length}
                     onChange={handleSelectAll}
-                    className="h-4 w-4 accent-primary cursor-pointer"
+                    className="h-3.5 w-3.5 sm:h-4 sm:w-4 accent-primary cursor-pointer"
                     title="Select all"
                   />
                 </th>
-                <th className="sticky left-[40px] z-20 w-[250px] border-r border-border bg-background px-4 py-3 text-left font-medium text-muted-foreground">
+                <th className="sticky left-[36px] sm:left-[40px] z-20 w-[180px] sm:w-[250px] border-r border-border bg-background px-2 sm:px-4 py-2 sm:py-3 text-left font-medium text-muted-foreground">
                   Item
                 </th>
                 <SortableContext items={columns.map(c => c.id)} strategy={horizontalListSortingStrategy}>
@@ -1002,7 +1006,7 @@ export function BoardTable(props: Props) {
                     }, 0);
 
                     return (
-                      <td key={col.id} className="px-4 py-3 text-right">
+                      <td key={col.id} className="px-2 sm:px-4 py-2 sm:py-3 text-right text-xs sm:text-sm">
                         {col.type === 'money' ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(sum) : sum}
                       </td>
                     );
@@ -1181,17 +1185,17 @@ function GroupHeader({
     >
       <td
         colSpan={2}
-        className="px-4 py-2 font-medium border-b border-border sticky left-0 z-10 bg-muted/50"
+        className="px-2 sm:px-4 py-1.5 sm:py-2 font-medium border-b border-border sticky left-0 z-10 bg-muted/50"
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
             {groupItems.length > 0 && (
               <input
                 type="checkbox"
                 checked={groupItems.length > 0 && groupItems.every(item => selectedItems.has(item.id))}
                 onChange={onSelectAllInGroup}
                 onClick={(e) => e.stopPropagation()}
-                className="h-4 w-4 accent-primary cursor-pointer"
+                className="h-3.5 w-3.5 sm:h-4 sm:w-4 accent-primary cursor-pointer flex-shrink-0"
                 title="Select all in group"
               />
             )}
@@ -1245,7 +1249,7 @@ function GroupHeader({
             </div>
             {isEditing ? (
               <input
-                className="px-2 py-1 text-sm border rounded"
+                className="px-2 py-1 text-xs sm:text-sm border rounded flex-1 min-w-0"
                 autoFocus
                 value={editingName}
                 onChange={(e) => setEditingName(e.target.value)}
@@ -1254,7 +1258,7 @@ function GroupHeader({
               />
             ) : (
               <span
-                className="cursor-pointer hover:text-primary"
+                className="cursor-pointer hover:text-primary text-xs sm:text-sm truncate"
                 onClick={startEditing}
                 {...attributes}
                 {...listeners}
@@ -1263,18 +1267,18 @@ function GroupHeader({
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1 sm:gap-2 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
             <button
               onClick={onAddItem}
-              className="text-xs px-2 py-1 rounded hover:bg-muted"
+              className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded hover:bg-muted whitespace-nowrap"
             >
-              + Add Item
+              + Add
             </button>
             <button
               onClick={onDelete}
-              className="text-xs px-2 py-1 rounded hover:bg-destructive/10 text-destructive"
+              className="text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded hover:bg-destructive/10 text-destructive hidden sm:inline-block"
             >
-              Delete Group
+              Delete
             </button>
           </div>
         </div>
@@ -1289,7 +1293,7 @@ function GroupHeader({
           }, 0);
 
           return (
-            <td key={col.id} className="px-4 py-2 border-b border-border text-right font-medium text-muted-foreground text-xs">
+            <td key={col.id} className="px-2 sm:px-4 py-1.5 sm:py-2 border-b border-border text-right font-medium text-muted-foreground text-xs">
               {col.type === 'money' ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'EUR' }).format(sum) : sum}
             </td>
           );
@@ -1344,16 +1348,16 @@ function SortableItemRow({
       style={style}
       className={`group border-b border-border hover:bg-muted/30 transition-colors ${isSelected ? 'bg-primary/5' : ''}`}
     >
-      <td className="sticky left-0 z-10 border-r border-border bg-surface group-hover:bg-muted/30 px-2 py-2 text-center">
+      <td className="sticky left-0 z-10 border-r border-border bg-surface group-hover:bg-muted/30 px-1 sm:px-2 py-1.5 sm:py-2 text-center">
         <input
           type="checkbox"
           checked={isSelected}
           onChange={onToggleSelect}
           onClick={(e) => e.stopPropagation()}
-          className="h-4 w-4 accent-primary cursor-pointer"
+          className="h-3.5 w-3.5 sm:h-4 sm:w-4 accent-primary cursor-pointer"
         />
       </td>
-      <td className="sticky left-[40px] z-10 border-r border-border bg-surface group-hover:bg-muted/30 px-4 py-2">
+      <td className="sticky left-[36px] sm:left-[40px] z-10 border-r border-border bg-surface group-hover:bg-muted/30 px-2 sm:px-4 py-1.5 sm:py-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 flex-1">
             <span
@@ -1390,7 +1394,7 @@ function SortableItemRow({
       {columns.map((col) => (
         <td
           key={col.id}
-          className="border-r border-border px-4 py-2"
+          className="border-r border-border px-2 sm:px-4 py-1.5 sm:py-2"
           style={{ width: `${col.width}px`, minWidth: `${col.width}px` }}
         >
           <CellEditor

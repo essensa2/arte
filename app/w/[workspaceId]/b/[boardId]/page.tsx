@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { BoardChatbot } from '@/components/chat/Chatbot';
+import { PWAInstallButton } from '@/components/PWAInstallButton';
 
 type Board = { id: string; name: string };
 
@@ -50,31 +51,39 @@ export default function BoardPage() {
   if (error) return <div className="p-6 text-destructive">{error}</div>;
 
   return (
-    <main className="p-6 min-h-screen">
+    <main className="p-3 sm:p-6 min-h-screen">
       {board && (
         <div className="mx-auto max-w-6xl">
-          <div className="flex items-center justify-between mb-6">
-            <h1 className="text-2xl font-semibold">{board.name}</h1>
-            <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4 sm:mb-6">
+            <h1 className="text-xl sm:text-2xl font-semibold truncate">{board.name}</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="hidden sm:block">
+                <PWAInstallButton />
+              </div>
               <Button
                 onClick={() => setShowAutomationsModal(true)}
                 variant="outline"
                 size="sm"
+                className="text-xs sm:text-sm"
               >
                 Settings
               </Button>
               <Sheet>
                 <SheetTrigger asChild>
-                  <Button size="sm" variant="outline">
-                    🤖 AI Assistant
+                  <Button size="sm" variant="outline" className="text-xs sm:text-sm">
+                    🤖 AI
                   </Button>
                 </SheetTrigger>
-                <SheetContent side="right" className="w-[425px] sm:w-[540px]">
+                <SheetContent side="right" className="w-full sm:w-[425px] md:w-[540px]">
                   <SheetTitle>Board AI Chatbot</SheetTitle>
                   <BoardChatbot boardId={board.id} onClose={() => setShowChatbot(false)} />
                 </SheetContent>
               </Sheet>
             </div>
+          </div>
+          {/* Mobile PWA Install Button */}
+          <div className="sm:hidden mb-3">
+            <PWAInstallButton />
           </div>
           <BoardTable boardId={board.id} workspaceId={params.workspaceId as string} />
         </div>

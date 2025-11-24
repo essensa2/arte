@@ -76,11 +76,12 @@ export function PWAInstallButton() {
   return (
     <button
       onClick={handleInstallClick}
-      className="inline-flex items-center gap-2 rounded-md bg-green-600 px-6 py-3 text-white hover:bg-green-700 font-medium transition-colors shadow-lg hover:shadow-xl"
+      className="inline-flex items-center gap-1.5 sm:gap-2 rounded-md bg-green-600 px-3 sm:px-6 py-1.5 sm:py-3 text-white hover:bg-green-700 font-medium transition-colors shadow-lg hover:shadow-xl text-xs sm:text-sm"
       aria-label="Install ArtePay App"
     >
-      <Download className="h-5 w-5" />
-      Install App
+      <Download className="h-4 w-4 sm:h-5 sm:w-5" />
+      <span className="hidden sm:inline">Install App</span>
+      <span className="sm:hidden">Install</span>
     </button>
   );
 }
