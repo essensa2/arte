@@ -43,6 +43,14 @@ export default function RootLayout({
                 <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
             </head>
             <body className={inter.className}>
+                <header className="border-b">
+                    <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-6 py-3">
+                        <a href="/workspaces" className="text-sm font-semibold hover:opacity-80">
+                            ArtePay
+                        </a>
+                        <SignOutButton />
+                    </div>
+                </header>
                 {children}
                 <Toaster />
             </body>

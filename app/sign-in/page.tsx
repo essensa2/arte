@@ -1,5 +1,6 @@
 "use client";
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 
@@ -10,6 +11,12 @@ export default function SignInPage() {
   const [mode, setMode] = useState<'sign-in' | 'sign-up'>('sign-in');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const authError = params.get('error');
+    if (authError) setError(authError);
+  }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,7 +55,17 @@ export default function SignInPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Password</label>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <label className="block text-sm font-medium">Password</label>
+              {mode === 'sign-in' && (
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-muted-foreground underline hover:text-foreground"
+                >
+                  Forgot password?
+                </Link>
+              )}
+            </div>
             <input
               type="password"
               value={password}

@@ -122,7 +122,15 @@ export default function WorkspacesPage() {
 
   return (
     <main className="mx-auto max-w-3xl p-6">
-      <h1 className="text-2xl font-semibold">Workspaces</h1>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">Workspaces</h1>
+        <a
+          href="/profile"
+          className="text-sm text-muted-foreground underline hover:text-foreground"
+        >
+          Profile
+        </a>
+      </div>
       <form onSubmit={onCreateWorkspace} className="mt-6 flex items-end gap-3">
         <div className="flex-1">
           <label className="block text-sm font-medium">Workspace name</label>
